@@ -2,14 +2,19 @@
 use std::io::{self, Write};
 use std::{env, fs, process::Command};
 
+struct ShellContext {
+    pwd: String,
+}
+
 fn main() {
+    let mut ctx = ShellContext { pwd: get_pwd() };
     // start repl
     loop {
-        repl();
+        repl(&mut ctx);
     }
 }
 
-fn repl() {
+fn repl(ctx: &mut ShellContext) {
     print!("$ ");
     flushio();
     let stdin = io::stdin();
@@ -20,14 +25,9 @@ fn repl() {
         "exit" => std::process::exit(0),
         "echo" => {
             println!("{}", toks[1..].join(" "));
-            flushio();
         }
         "pwd" => {
-            let pwd = match env::current_dir() {
-                Ok(value) => value.into_os_string().into_string().unwrap(),
-                Err(e) => e.to_string(),
-            };
-            println!("{}", pwd);
+            println!("{}", ctx.pwd);
         }
         "type" => {
             if toks.len() < 2 {
@@ -40,8 +40,10 @@ fn repl() {
                 } else {
                     println!("{}: not found", toks[1]);
                 }
-                flushio();
             }
+        }
+        "cd" => {
+            ctx.pwd = change_pwd(ctx.pwd.as_str(), toks[1]);
         }
         _ => {
             if let Some(addr) = find_in_paths(toks[0]) {
@@ -55,14 +57,14 @@ fn repl() {
             } else {
                 println!("{}: command not found", input.trim());
             }
-            flushio();
         }
     }
+    flushio();
 }
 
 fn is_builtin(s: &str) -> bool {
     match s {
-        "exit" | "echo" | "type" | "pwd" => true,
+        "exit" | "echo" | "type" | "pwd" | "cd" => true,
         _ => false,
     }
 }
@@ -103,6 +105,23 @@ fn path_contains_file(path: &str, s: &str) -> bool {
             // eprintln!("Could not read dir {}: {}", path, e);
             false
         }
+    }
+}
+
+fn change_pwd(old: &str, new: &str) -> String {
+    match fs::read_dir(new) {
+        Ok(_) => new.to_string(),
+        Err(_) => {
+            println!("cd: {}: No such file or directory", new);
+            old.to_string()
+        }
+    }
+}
+
+fn get_pwd() -> String {
+    match env::current_dir() {
+        Ok(value) => value.into_os_string().to_string_lossy().to_string(),
+        Err(e) => e.to_string(),
     }
 }
 
