@@ -1,4 +1,3 @@
-#[allow(unused_imports)]
 use std::io::{self, Write};
 use std::{collections::VecDeque, env, fs, process::Command};
 
@@ -111,6 +110,11 @@ fn path_contains_file(path: &str, s: &str) -> bool {
 
 fn change_pwd(old: &str, new: &str) -> String {
     let new = get_path_string(old, new);
+    if !new.is_ok() {
+        eprintln!("{}", new.unwrap_err());
+        return old.to_string();
+    }
+    let new = new.unwrap();
     match fs::read_dir(new.as_str()) {
         Ok(_) => new,
         Err(_) => {
@@ -120,14 +124,20 @@ fn change_pwd(old: &str, new: &str) -> String {
     }
 }
 // assumption: path string doesn't end with /
-fn get_path_string(curr: &str, next: &str) -> String {
-    let mut curr_parts = curr.split("/").collect::<VecDeque<&str>>();
-    let mut next_parts = next.split("/").collect::<VecDeque<&str>>();
+fn get_path_string(curr: &str, next: &str) -> Result<String, String> {
+    let mut curr_parts = curr
+        .split("/")
+        .map(|s| s.to_string())
+        .collect::<VecDeque<String>>();
+    let mut next_parts = next
+        .split("/")
+        .map(|s| s.to_string())
+        .collect::<VecDeque<String>>();
 
-    let mut newpath_parts: VecDeque<&str> = VecDeque::new();
+    let mut newpath_parts: VecDeque<String> = VecDeque::new();
 
-    match next_parts[0] {
-        "" => return next.to_string(),
+    match next_parts[0].as_str() {
+        "" => return Ok(next.to_string()),
         "." => {
             next_parts.pop_front();
             newpath_parts.append(&mut curr_parts);
@@ -137,16 +147,30 @@ fn get_path_string(curr: &str, next: &str) -> String {
             next_parts.pop_front();
             newpath_parts.append(&mut curr_parts);
         }
+        "~" => match env::var("HOME") {
+            Ok(value) => {
+                curr_parts.clear();
+                let mut val = value
+                    .split("/")
+                    .map(|s| s.to_string())
+                    .collect::<VecDeque<String>>();
+                next_parts.pop_front();
+                newpath_parts.append(&mut val);
+            }
+            Err(e) => {
+                return Err(format!("Not found HOME: {}", e));
+            }
+        },
         _ => {
             newpath_parts.append(&mut curr_parts);
         }
     }
 
     for dir in next_parts {
-        match dir {
+        match dir.as_str() {
             ".." => {
                 if newpath_parts.pop_back() == None || newpath_parts.len() == 0 {
-                    return String::new();
+                    return Err("Tried going above root".to_string());
                 }
             }
             _ => {
@@ -158,12 +182,13 @@ fn get_path_string(curr: &str, next: &str) -> String {
             }
         }
     }
-    newpath_parts
+    let okval = newpath_parts
         .iter()
-        .map(|s| *s)
+        .map(|s| s.as_str())
         .collect::<Vec<&str>>()
         .join("/")
-        .to_string()
+        .to_string();
+    Ok(okval)
 }
 
 fn get_pwd() -> String {
