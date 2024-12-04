@@ -22,6 +22,13 @@ fn repl() {
             println!("{}", toks[1..].join(" "));
             flushio();
         }
+        "pwd" => {
+            let pwd = match env::current_dir() {
+                Ok(value) => value.into_os_string().into_string().unwrap(),
+                Err(e) => e.to_string(),
+            };
+            println!("{}", pwd);
+        }
         "type" => {
             if toks.len() < 2 {
                 eprintln!("No command provided!");
@@ -55,7 +62,7 @@ fn repl() {
 
 fn is_builtin(s: &str) -> bool {
     match s {
-        "exit" | "echo" | "type" => true,
+        "exit" | "echo" | "type" | "pwd" => true,
         _ => false,
     }
 }
