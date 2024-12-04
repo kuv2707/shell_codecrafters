@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::{env, fs, process::Command};
+use std::{collections::VecDeque, env, fs, process::Command};
 
 struct ShellContext {
     pwd: String,
@@ -8,6 +8,7 @@ struct ShellContext {
 
 fn main() {
     let mut ctx = ShellContext { pwd: get_pwd() };
+
     // start repl
     loop {
         repl(&mut ctx);
@@ -109,13 +110,60 @@ fn path_contains_file(path: &str, s: &str) -> bool {
 }
 
 fn change_pwd(old: &str, new: &str) -> String {
-    match fs::read_dir(new) {
-        Ok(_) => new.to_string(),
+    let new = get_path_string(old, new);
+    match fs::read_dir(new.as_str()) {
+        Ok(_) => new,
         Err(_) => {
             println!("cd: {}: No such file or directory", new);
             old.to_string()
         }
     }
+}
+// assumption: path string doesn't end with /
+fn get_path_string(curr: &str, next: &str) -> String {
+    let mut curr_parts = curr.split("/").collect::<VecDeque<&str>>();
+    let mut next_parts = next.split("/").collect::<VecDeque<&str>>();
+
+    let mut newpath_parts: VecDeque<&str> = VecDeque::new();
+
+    match next_parts[0] {
+        "" => return next.to_string(),
+        "." => {
+            next_parts.pop_front();
+            newpath_parts.append(&mut curr_parts);
+        }
+        ".." => {
+            curr_parts.pop_back();
+            next_parts.pop_front();
+            newpath_parts.append(&mut curr_parts);
+        }
+        _ => {
+            newpath_parts.append(&mut curr_parts);
+        }
+    }
+
+    for dir in next_parts {
+        match dir {
+            ".." => {
+                if newpath_parts.pop_back() == None || newpath_parts.len() == 0 {
+                    return String::new();
+                }
+            }
+            _ => {
+                if dir != "" {
+                    newpath_parts.push_back(dir);
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+    newpath_parts
+        .iter()
+        .map(|s| *s)
+        .collect::<Vec<&str>>()
+        .join("/")
+        .to_string()
 }
 
 fn get_pwd() -> String {
