@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use std::{env, fs};
+use std::{env, fs, process::Command};
 
 fn main() {
     // start repl
@@ -37,7 +37,17 @@ fn repl() {
             }
         }
         _ => {
-            println!("{}: command not found", input.trim());
+            if let Some(addr) = find_in_paths(toks[0]) {
+                // it is an executable
+                let output = Command::new(addr)
+                    .args(&toks[1..])
+                    .output()
+                    .expect("Failed to execute it!");
+                let out = String::from_utf8_lossy(&output.stdout.as_slice());
+                print!("{}", out);
+            } else {
+                println!("{}: command not found", input.trim());
+            }
             flushio();
         }
     }
@@ -82,8 +92,8 @@ fn path_contains_file(path: &str, s: &str) -> bool {
             }
             false
         }
-        Err(e) => {
-            eprintln!("Could not read dir {}: {}", path, e);
+        Err(_e) => {
+            // eprintln!("Could not read dir {}: {}", path, e);
             false
         }
     }
