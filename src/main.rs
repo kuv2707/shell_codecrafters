@@ -21,10 +21,29 @@ fn repl() {
             println!("{}", toks[1..].join(" "));
             flushio();
         }
+        "type" => {
+            if toks.len() < 2 {
+                eprintln!("No command provided!");
+            } else {
+                if is_builtin(toks[1]) {
+                    println!("{} is a shell builtin", toks[1]);
+                } else {
+                    println!("{}: not found", toks[1]);
+                }
+                flushio();
+            }
+        }
         _ => {
             println!("{}: command not found", input.trim());
             flushio();
         }
+    }
+}
+
+fn is_builtin(s: &str) -> bool {
+    match s {
+        "exit" | "echo" | "type" => true,
+        _ => false,
     }
 }
 
