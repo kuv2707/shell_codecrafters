@@ -11,16 +11,28 @@ fn main() {
     // start repl
     loop {
         repl(&mut ctx);
+        // return;
     }
+}
+
+fn read_input(input: &mut String) {
+    let stdin = io::stdin();
+    stdin.read_line(input).unwrap();
+    // input.push_str("echo 'hello  world   hi    ,'");
 }
 
 fn repl(ctx: &mut ShellContext) {
     print!("$ ");
     flushio();
-    let stdin = io::stdin();
     let mut input = String::new();
-    stdin.read_line(&mut input).unwrap();
-    let toks = input.trim().split_whitespace().collect::<Vec<&str>>();
+    read_input(&mut input);
+
+    if input.len() == 0 {
+        return;
+    }
+
+    let tokens = parse_shell_command_params(input.trim());
+    let toks = tokens.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
     match toks[0] {
         "exit" => std::process::exit(0),
         "echo" => {
@@ -200,4 +212,69 @@ fn get_pwd() -> String {
 
 fn flushio() {
     io::stdout().flush().unwrap();
+}
+
+fn parse_shell_command_params(s: &str) -> Vec<String> {
+    let mut toks: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < s.chars().count() {
+        let c = s.chars().nth(i).unwrap();
+        match c {
+            '\'' => {
+                i += 1;
+                let nxt_sq = s[i..].find('\'').expect("Please escape single quote");
+                toks.push(s[i..(i + nxt_sq)].to_string());
+                i += nxt_sq;
+            }
+            '\"' => {
+                i += 1;
+                // this method of finding closing " ignores escaped "
+                let nxt_sq = s[i..].find('\"').expect("Please escape single quote");
+                toks.push(process_double_quoted_str(&s[i..(i + nxt_sq)]));
+                i += nxt_sq;
+            }
+            _ => {
+                let nxt_ws = s[i..].find(' ').unwrap_or(s.len() - i);
+                let st = &s[i..(i + nxt_ws)];
+                if st.len() > 0 {
+                    toks.push(st.to_string());
+                }
+                i = i + nxt_ws;
+            }
+        }
+        i += 1;
+    }
+    toks
+}
+
+// this is far from perfect
+fn process_double_quoted_str(s: &str) -> String {
+    let mut ret = String::new();
+    let mut backsls = false;
+    for k in s.chars() {
+        match k {
+            '$' | '`' | '"' | '\\' => {
+                if backsls {
+                    ret.push(k);
+                    backsls = false;
+                } else {
+                    // each will show their special behaviour
+                    // $ is used to access env vars. TODO this
+                    if k == '\\' {
+                        backsls = true;
+                    } else {
+                        ret.push(k);
+                    }
+                }
+            }
+            _ => {
+                if backsls {
+                    backsls = false;
+                    ret.push('\\');
+                }
+                ret.push(k);
+            }
+        }
+    }
+    ret
 }
