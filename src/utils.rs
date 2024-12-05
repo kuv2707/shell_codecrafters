@@ -19,22 +19,6 @@ pub fn read_input() -> String {
     return input;
 }
 
-pub fn find_in_paths(s: &str) -> Option<String> {
-    match env::var("PATH") {
-        Ok(value) => {
-            let paths = value.split(":").collect::<Vec<&str>>();
-            for path in paths {
-                if path_contains_file(path, s) {
-                    let ret = format!("{}/{}", path, s);
-                    return Some(ret);
-                }
-            }
-            None
-        }
-        Err(_e) => None,
-    }
-}
-
 fn path_contains_file(path: &str, s: &str) -> bool {
     match fs::read_dir(path) {
         Ok(value) => {
@@ -55,6 +39,22 @@ fn path_contains_file(path: &str, s: &str) -> bool {
             // eprintln!("Could not read dir {}: {}", path, e);
             false
         }
+    }
+}
+
+pub fn find_in_paths(s: &str) -> Option<String> {
+    match env::var("PATH") {
+        Ok(value) => {
+            let paths = value.split(":").collect::<Vec<&str>>();
+            for path in paths {
+                if path_contains_file(path, s) {
+                    let ret = format!("{}/{}", path, s);
+                    return Some(ret);
+                }
+            }
+            None
+        }
+        Err(_e) => None,
     }
 }
 
@@ -125,7 +125,7 @@ pub fn get_path_string(curr: &str, next: &str) -> Result<String, String> {
     Ok(okval)
 }
 
-pub fn push_concat(toks: &mut Vec<String>, temp: &str) {
+fn push_concat(toks: &mut Vec<String>, temp: &str) {
     let last = toks.pop();
     if last.is_none() {
         toks.push(temp.to_string());
@@ -139,4 +139,79 @@ pub fn push_concat(toks: &mut Vec<String>, temp: &str) {
         toks.push(last);
         toks.push(temp.to_string());
     }
+}
+
+pub fn parse_shell_command_params(s: &str) -> Vec<String> {
+    let mut toks: Vec<String> = Vec::new();
+    let mut i = 0;
+    let chars = s.chars().collect::<Vec<char>>();
+
+    while i < chars.len() {
+        match chars[i] {
+            '\'' => {
+                let mut qtemp = String::new();
+                let mut j = i + 1;
+                while j < chars.len() {
+                    if chars[j] == '\'' {
+                        break;
+                    } else {
+                        qtemp.push(chars[j]);
+                    }
+                    j += 1;
+                }
+                i = j;
+                push_concat(&mut toks, qtemp.as_str());
+            }
+            '\"' => {
+                let mut qtemp = String::new();
+                let mut j = i + 1;
+                while j < chars.len() {
+                    if chars[j] == '\\' {
+                        if j + 1 < chars.len() {
+                            let cc = chars[j + 1];
+                            if cc == '$' || cc == '`' || cc == '\"' || cc == '\\' {
+                                qtemp.push(chars[j + 1]);
+                            } else {
+                                qtemp.push('\\');
+                                qtemp.push(chars[j + 1]);
+                            }
+                            j += 1;
+                        }
+                    } else if chars[j] == '\"' {
+                        break;
+                    } else {
+                        qtemp.push(chars[j]);
+                    }
+                    j += 1;
+                }
+                i = j;
+                push_concat(&mut toks, qtemp.as_str());
+            }
+            _ => {
+                let mut temp = String::new();
+                while i < chars.len() {
+                    if chars[i] == '\\' {
+                        if i + 1 < chars.len() {
+                            temp.push(chars[i + 1]);
+                            i += 1;
+                        }
+                    } else if chars[i] == ' ' {
+                        temp.push(chars[i]);
+                        break;
+                    } else {
+                        temp.push(chars[i]);
+                    }
+                    i += 1;
+                }
+                if temp.len() > 0 {
+                    push_concat(&mut toks, temp.as_str());
+                }
+            }
+        }
+        i += 1
+    }
+    toks.iter()
+        .filter(|s| s.trim().len() > 0)
+        .map(|s| s.trim().to_string())
+        .collect::<Vec<String>>()
 }
