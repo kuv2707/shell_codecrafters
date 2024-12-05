@@ -217,64 +217,90 @@ fn flushio() {
 fn parse_shell_command_params(s: &str) -> Vec<String> {
     let mut toks: Vec<String> = Vec::new();
     let mut i = 0;
-    while i < s.chars().count() {
-        let c = s.chars().nth(i).unwrap();
-        match c {
+    let chars = s.chars().collect::<Vec<char>>();
+
+    while i < chars.len() {
+        match chars[i] {
             '\'' => {
-                i += 1;
-                let nxt_sq = s[i..].find('\'').expect("Please escape single quote");
-                toks.push(s[i..(i + nxt_sq)].to_string());
-                i += nxt_sq;
+                let mut qtemp = String::new();
+                let mut j = i + 1;
+                while j < chars.len() {
+                    if chars[j] == '\'' {
+                        break;
+                    } else {
+                        qtemp.push(chars[j]);
+                    }
+                    j += 1;
+                }
+                i = j;
+                push_concat(&mut toks, qtemp.as_str());
             }
             '\"' => {
-                i += 1;
-                // this method of finding closing " ignores escaped "
-                let nxt_sq = s[i..].find('\"').expect("Please escape single quote");
-                toks.push(process_double_quoted_str(&s[i..(i + nxt_sq)]));
-                i += nxt_sq;
+                let mut qtemp = String::new();
+                let mut j = i + 1;
+                while j < chars.len() {
+                    if chars[j] == '\\' {
+                        if j + 1 < chars.len() {
+                            let cc = chars[j + 1];
+                            if cc == '$' || cc == '`' || cc == '\"' || cc == '\\' {
+                                qtemp.push(chars[j + 1]);
+                            } else {
+                                qtemp.push('\\');
+                                qtemp.push(chars[j + 1]);
+                            }
+                            j += 1;
+                        }
+                    } else if chars[j] == '\"' {
+                        break;
+                    } else {
+                        qtemp.push(chars[j]);
+                    }
+                    j += 1;
+                }
+                i = j;
+                push_concat(&mut toks, qtemp.as_str());
             }
             _ => {
-                let nxt_ws = s[i..].find(' ').unwrap_or(s.len() - i);
-                let st = &s[i..(i + nxt_ws)];
-                if st.len() > 0 {
-                    toks.push(st.to_string());
+                let mut temp = String::new();
+                while i < chars.len() {
+                    if chars[i] == '\\' {
+                        if i + 1 < chars.len() {
+                            temp.push(chars[i + 1]);
+                            i += 1;
+                        }
+                    } else if chars[i] == ' ' {
+                        temp.push(chars[i]);
+                        break;
+                    } else {
+                        temp.push(chars[i]);
+                    }
+                    i += 1;
                 }
-                i = i + nxt_ws;
+                if temp.len() > 0 {
+                    push_concat(&mut toks, temp.as_str());
+                }
             }
         }
-        i += 1;
+        i += 1
     }
-    toks
+    toks.iter()
+    .filter(|s| s.trim().len() > 0)
+        .map(|s| s.trim().to_string())
+        .collect::<Vec<String>>()
 }
 
-// this is far from perfect
-fn process_double_quoted_str(s: &str) -> String {
-    let mut ret = String::new();
-    let mut backsls = false;
-    for k in s.chars() {
-        match k {
-            '$' | '`' | '"' | '\\' => {
-                if backsls {
-                    ret.push(k);
-                    backsls = false;
-                } else {
-                    // each will show their special behaviour
-                    // $ is used to access env vars. TODO this
-                    if k == '\\' {
-                        backsls = true;
-                    } else {
-                        ret.push(k);
-                    }
-                }
-            }
-            _ => {
-                if backsls {
-                    backsls = false;
-                    ret.push('\\');
-                }
-                ret.push(k);
-            }
-        }
+fn push_concat(toks: &mut Vec<String>, temp: &str) {
+    let last = toks.pop();
+    if last.is_none() {
+        toks.push(temp.to_string());
+        return;
     }
-    ret
+    let mut last = last.unwrap();
+    if !last.ends_with(" ") {
+        last.push_str(temp);
+        toks.push(last);
+    } else {
+        toks.push(last);
+        toks.push(temp.to_string());
+    }
 }
